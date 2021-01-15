@@ -1,4 +1,4 @@
-package homecast
+package cast
 
 import (
 	"context"
