@@ -36,6 +36,11 @@ func main() {
 						Value:   "ja",
 						Usage:   "message locale code",
 					},
+					&cli.IntFlag{
+						Name:    "port",
+						Aliases: []string{"p"},
+						Value:   8000,
+					},
 				},
 				Action: startDaemon,
 			},
@@ -88,6 +93,18 @@ func main() {
 					},
 				},
 				Action: notifyFromDevices,
+			},
+			{
+				Name:  "server",
+				Usage: "run server",
+				Flags: []cli.Flag{
+					&cli.IntFlag{
+						Name:    "port",
+						Aliases: []string{"p"},
+						Value:   8000,
+					},
+				},
+				Action: simpleServe,
 			},
 		},
 	}

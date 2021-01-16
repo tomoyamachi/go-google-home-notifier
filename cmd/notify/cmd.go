@@ -3,12 +3,18 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
+	"io/ioutil"
 	"log"
 	"net/http"
+	"os"
+	"os/signal"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/urfave/cli/v2"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/tomoyamachi/notifyhome/pkg/cast"
 	"github.com/tomoyamachi/notifyhome/pkg/gcal"
@@ -39,18 +45,39 @@ func fetchAndShowPlans(c *cli.Context) error {
 
 func startDaemon(c *cli.Context) error {
 	log.Print("Start daemon.")
-	within := c.Duration("within")
+	eg, ctx := errgroup.WithContext(c.Context)
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	killSignal := make(chan os.Signal, 1)
+	signal.Notify(killSignal, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-killSignal
+		log.Println("interrupted")
+		cancel()
+	}()
+
 	localeCode := c.String("locale")
-	if err := fetchAndNotifyPlans(c.Context, localeCode, within); err != nil {
+	eg.Go(func() error {
+		return regularNotify(ctx, localeCode, c.Duration("notify-duration"), c.Duration("within"))
+	})
+	eg.Go(func() error {
+		return httpRun(ctx, localeCode, c.Int("port"))
+	})
+
+	return eg.Wait()
+}
+
+func regularNotify(ctx context.Context, localeCode string, tick, within time.Duration) error {
+	if err := fetchAndNotifyPlans(ctx, localeCode, within); err != nil {
 		return err
 	}
-	ticker := time.NewTicker(c.Duration("notify-duration"))
+	ticker := time.NewTicker(tick)
 	defer ticker.Stop()
 	for {
 		select {
 		case <-ticker.C:
 			log.Print("run fetchAndNotifyPlans")
-			if err := fetchAndNotifyPlans(c.Context, localeCode, within); err != nil {
+			if err := fetchAndNotifyPlans(ctx, localeCode, within); err != nil {
 				log.Print(err)
 			}
 		}
@@ -137,4 +164,44 @@ func checkErrs(errs []error) (err error) {
 		log.Print(err)
 	}
 	return err // temporary, return a last error
+}
+
+func simpleServe(c *cli.Context) error {
+	return httpRun(c.Context, "ja", c.Int("port"))
+}
+
+func httpRun(ctx context.Context, localeCode string, port int) error {
+	handler := http.NewServeMux()
+	handler.HandleFunc("/notify", func(w http.ResponseWriter, req *http.Request) {
+		switch req.Method {
+		case http.MethodPost:
+			b, err := ioutil.ReadAll(req.Body)
+			if err != nil {
+				io.WriteString(w, "Internal error\n")
+				return
+			}
+			if err := notifyWithCtx(ctx, localeCode, string(b)); err != nil {
+				io.WriteString(w, "Internal error\n")
+				return
+			}
+			w.Write(b)
+			return
+		default:
+			io.WriteString(w, "Invalid methods\n")
+			return
+		}
+	})
+	server := &http.Server{Addr: fmt.Sprintf(":%d", port), Handler: handler}
+	go func() {
+		<-ctx.Done()
+		log.Print("httpRun will be stop...")
+		if err := server.Shutdown(ctx); err != nil {
+			log.Printf("http server shutdown: %+v\n", err)
+		}
+	}()
+	log.Printf("server start on port: %d\n", port)
+	if err := server.ListenAndServe(); err != nil {
+		return err
+	}
+	return nil
 }
