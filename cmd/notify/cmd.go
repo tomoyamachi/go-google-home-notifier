@@ -8,147 +8,70 @@ import (
 	"sync"
 	"time"
 
+	"github.com/urfave/cli/v2"
+
 	"github.com/tomoyamachi/notifyhome/pkg/cast"
 	"github.com/tomoyamachi/notifyhome/pkg/gcal"
-	"github.com/urfave/cli/v2"
-	calendar "google.golang.org/api/calendar/v3"
-)
-
-const (
-	notifyInterval = time.Minute * 30
-	notifyBuffer   = time.Hour * 3
+	"github.com/tomoyamachi/notifyhome/pkg/locale"
 )
 
 func addToken(c *cli.Context) error {
 	return gcal.AddToken(c.Context)
 }
 
-func fetchPlan(c *cli.Context) error {
+func notifyFromDevices(c *cli.Context) error {
+	return notifyWithCtx(c.Context, c.String("locale"), c.String("message"))
+}
+
+func fetchAndShowPlans(c *cli.Context) error {
 	clis, err := gcal.GetClients(c.Context)
 	if err != nil {
 		return err
 	}
-	var wg sync.WaitGroup
-	errChan := make(chan error, len(clis))
-	i := 0
-	for _, cli := range clis {
-		i++
-		wg.Add(1)
-
-		go func(idx int, cli *http.Client, wg *sync.WaitGroup) {
-			defer wg.Done()
-			events, err := FetchEvents(cli, 0)
-			if err != nil {
-				errChan <- err
-			}
-			if len(events) == 0 {
-				fmt.Printf("Account %d: No upcoming events\n", idx)
-			} else {
-				for _, item := range events {
-					date := item.Start.DateTime
-					if date == "" {
-						date = item.Start.Date
-					}
-					fmt.Printf("Account %d: %v %v\n", idx, date, item.Summary)
-				}
-			}
-		}(i, cli, &wg)
+	eventsList, errs := getEventsAndEror(clis, c.Int64("count"), c.Duration("within"))
+	for idx, events := range eventsList {
+		for _, event := range events {
+			fmt.Printf("%d: %v %s\n", idx, event.Start, event.Title)
+		}
 	}
-	wg.Wait()
-	close(errChan)
-	for err := range errChan {
-		return err
-	}
-	return nil
-}
-
-func FetchEvents(cli *http.Client, duration time.Duration) ([]*calendar.Event, error) {
-	srv, err := calendar.New(cli)
-	if err != nil {
-		return nil, fmt.Errorf("Retrieve Calendar client: %w", err)
-	}
-	t := time.Now().Format(time.RFC3339)
-	call := srv.Events.List("primary").ShowDeleted(false).
-		SingleEvents(true).TimeMin(t).MaxResults(1).OrderBy("startTime")
-	if duration > 0 {
-		call.TimeMax(time.Now().Add(duration).Format(time.RFC3339))
-	}
-	events, err := call.Do()
-	if err != nil {
-		return nil, fmt.Errorf("Retrieve next events: %w", err)
-	}
-	return events.Items, nil
+	return checkErrs(errs)
 }
 
 func startDaemon(c *cli.Context) error {
-	ticker := time.NewTicker(notifyInterval)
+	log.Print("Start daemon.")
+	within := c.Duration("within")
+	localeCode := c.String("locale")
+	if err := fetchAndNotifyPlans(c.Context, localeCode, within); err != nil {
+		return err
+	}
+	ticker := time.NewTicker(c.Duration("notify-duration"))
 	defer ticker.Stop()
-	i := 0
 	for {
 		select {
 		case <-ticker.C:
-			i++
-			log.Print("start notify plan:", i)
-			if err := notifyPlans(c.Context); err != nil {
+			log.Print("run fetchAndNotifyPlans")
+			if err := fetchAndNotifyPlans(c.Context, localeCode, within); err != nil {
 				log.Print(err)
 			}
 		}
 	}
 }
 
-func notifyPlans(ctx context.Context) error {
+func fetchAndNotifyPlans(ctx context.Context, localeCode string, within time.Duration) error {
 	clis, err := gcal.GetClients(ctx)
 	if err != nil {
 		return err
 	}
-	var wg sync.WaitGroup
-	msgCh := make(chan string, len(clis))
-	errChan := make(chan error, len(clis))
-	i := 0
-	for _, cli := range clis {
-		i++
-		wg.Add(1)
-		go func(idx int, cli *http.Client, wg *sync.WaitGroup) {
-			defer wg.Done()
-			events, err := FetchEvents(cli, notifyBuffer)
-			if err != nil {
-				errChan <- err
-				return
+	eventsList, errs := getEventsAndEror(clis, 1, within)
+	locale := locale.GetLocale(localeCode)
+	for _, events := range eventsList {
+		for _, event := range events {
+			if err := notifyWithCtx(ctx, locale.Code(), locale.NotifyMessage(event.Start, event.Title)); err != nil {
+				errs = append(errs, err)
 			}
-			if len(events) > 0 {
-				for _, item := range events {
-					date := item.Start.DateTime
-					if date == "" {
-						date = item.Start.Date
-					}
-					tm, err := time.Parse(time.RFC3339, date)
-					if err != nil {
-						errChan <- err
-						return
-					}
-					msgCh <- fmt.Sprintf("%sから%s", tm.Format("15時04分"), item.Summary)
-				}
-			}
-		}(i, cli, &wg)
-	}
-	wg.Wait()
-	close(msgCh)
-	close(errChan)
-
-	for msg := range msgCh {
-		if err := notifyWithCtx(ctx, "ja", msg); err != nil {
-			return err
 		}
 	}
-
-	for err := range errChan {
-		return err
-	}
-	return nil
-}
-
-func notify(c *cli.Context) error {
-	return notifyWithCtx(c.Context, "en", "Good Morning. Hello. Good Evening.")
+	return checkErrs(errs)
 }
 
 func notifyWithCtx(ctx context.Context, locale, msg string) error {
@@ -170,4 +93,48 @@ func notifyWithCtx(ctx context.Context, locale, msg string) error {
 		return err
 	}
 	return nil
+}
+
+func getEventsAndEror(clis []*http.Client, cnt int64, within time.Duration) ([][]*gcal.Event, []error) {
+	eventsCh := make(chan []*gcal.Event, len(clis))
+	errChan := make(chan error, len(clis))
+	var wg sync.WaitGroup
+	wg.Add(len(clis))
+	for _, cli := range clis {
+		go func(cli *http.Client, wg *sync.WaitGroup) {
+			defer wg.Done()
+			events, err := gcal.FetchEvents(cli, cnt, within)
+			if err != nil {
+				errChan <- err
+				return
+			}
+			if len(events) > 0 {
+				eventsCh <- events
+			}
+		}(cli, &wg)
+	}
+	wg.Wait()
+	close(eventsCh)
+	close(errChan)
+
+	eventsList := make([][]*gcal.Event, len(clis))
+	for event := range eventsCh {
+		eventsList = append(eventsList, event)
+	}
+
+	errs := []error{}
+	for err := range errChan {
+		errs = append(errs, err)
+	}
+	return eventsList, errs
+}
+
+func checkErrs(errs []error) (err error) {
+	if len(errs) == 0 {
+		return nil
+	}
+	for _, err = range errs {
+		log.Print(err)
+	}
+	return err // temporary, return a last error
 }
