@@ -1,0 +1,42 @@
+project_name: google-home-notifier
+builds:
+  - main: cmd/notify/main.go
+    binary: notify
+    ldflags:
+      - -s -w
+      - "-extldflags '-static'"
+      - -X main.version={{.Version}}
+    goos:
+      - darwin
+      - linux
+      - windows
+    goarch:
+      - amd64
+      - 386
+      - arm
+      - arm64
+
+nfpms:
+  -
+    id: google-home-notifier
+    formats:
+      - deb
+      - rpm
+    vendor: "tomoyamachi"
+    homepage: "https://github.com/tomoyamachi"
+    maintainer: "Tomoya Amachi <tomoya.amachi@gmail.com>"
+    description: "Send notifications to Google Home devices."
+    license: "AGPL"
+    file_name_template: "{{.ProjectName}}_{{.Version}}_{{.Os}}-{{.Arch}}"
+
+archives:
+  - name_template: '{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}'
+    replacements:
+      darwin: Darwin
+      linux: Linux
+      windows: Windows
+      386: i386
+      amd64: x86_64
+    format_overrides:
+      - goos: windows
+        format: zip
