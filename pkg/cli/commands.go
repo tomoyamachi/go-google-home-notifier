@@ -1,4 +1,4 @@
-package main
+package cli
 
 import (
 	"context"
@@ -184,17 +184,26 @@ func httpRun(ctx context.Context, deviceCnt int, deviceName, localeCode string, 
 		case http.MethodPost:
 			b, err := ioutil.ReadAll(req.Body)
 			if err != nil {
-				io.WriteString(w, "Internal error\n")
+				if _, err := io.WriteString(w, "Internal error\n"); err != nil {
+					log.Printf("write to body %+v\n", err)
+				}
 				return
 			}
 			if err := notifyWithCtx(ctx, deviceCnt, deviceName, localeCode, string(b)); err != nil {
-				io.WriteString(w, "Internal error\n")
+				log.Printf("notifyWithCtx %+v\n", err)
+				if _, err := io.WriteString(w, "Internal error\n"); err != nil {
+					log.Printf("write to body %+v\n", err)
+				}
 				return
 			}
-			w.Write(b)
+			if _, err := w.Write(b); err != nil {
+				log.Printf("write to body %+v\n", err)
+			}
 			return
 		default:
-			io.WriteString(w, "Invalid methods\n")
+			if _, err := io.WriteString(w, "Invalid methods\n"); err != nil {
+				log.Printf("write to body %+v\n", err)
+			}
 			return
 		}
 	})
