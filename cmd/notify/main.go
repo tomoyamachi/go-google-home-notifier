@@ -12,6 +12,17 @@ import (
 func main() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	app := &cli.App{
+		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:  "device-name",
+				Usage: "target google home device name. default notify from all found devices.",
+			},
+			&cli.IntFlag{
+				Name:  "device-count",
+				Value: 4,
+				Usage: "max google home device count.",
+			},
+		},
 		Commands: []*cli.Command{
 			{
 				Name:    "daemon",

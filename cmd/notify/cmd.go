@@ -16,8 +16,8 @@ import (
 	"github.com/urfave/cli/v2"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/tomoyamachi/notifyhome/pkg/cast"
 	"github.com/tomoyamachi/notifyhome/pkg/gcal"
+	"github.com/tomoyamachi/notifyhome/pkg/googlecast"
 	"github.com/tomoyamachi/notifyhome/pkg/locale"
 )
 
@@ -26,7 +26,7 @@ func addToken(c *cli.Context) error {
 }
 
 func notifyFromDevices(c *cli.Context) error {
-	return notifyWithCtx(c.Context, c.String("locale"), c.String("message"))
+	return notifyWithCtx(c.Context, c.Int("device-count"), c.String("device-name"), c.String("locale"), c.String("message"))
 }
 
 func fetchAndShowPlans(c *cli.Context) error {
@@ -57,18 +57,20 @@ func startDaemon(c *cli.Context) error {
 	}()
 
 	localeCode := c.String("locale")
+	deviceCnt := c.Int("device-count")
+	deviceName := c.String("device-name")
 	eg.Go(func() error {
-		return regularNotify(ctx, localeCode, c.Duration("notify-duration"), c.Duration("within"))
+		return regularNotify(ctx, deviceCnt, deviceName, localeCode, c.Duration("notify-duration"), c.Duration("within"))
 	})
 	eg.Go(func() error {
-		return httpRun(ctx, localeCode, c.Int("port"))
+		return httpRun(ctx, deviceCnt, deviceName, localeCode, c.Int("port"))
 	})
 
 	return eg.Wait()
 }
 
-func regularNotify(ctx context.Context, localeCode string, tick, within time.Duration) error {
-	if err := fetchAndNotifyPlans(ctx, localeCode, within); err != nil {
+func regularNotify(ctx context.Context, deviceCnt int, deviceName, localeCode string, tick, within time.Duration) error {
+	if err := fetchAndNotifyPlans(ctx, deviceCnt, deviceName, localeCode, within); err != nil {
 		return err
 	}
 	ticker := time.NewTicker(tick)
@@ -77,14 +79,14 @@ func regularNotify(ctx context.Context, localeCode string, tick, within time.Dur
 		select {
 		case <-ticker.C:
 			log.Print("run fetchAndNotifyPlans")
-			if err := fetchAndNotifyPlans(ctx, localeCode, within); err != nil {
+			if err := fetchAndNotifyPlans(ctx, deviceCnt, deviceName, localeCode, within); err != nil {
 				log.Print(err)
 			}
 		}
 	}
 }
 
-func fetchAndNotifyPlans(ctx context.Context, localeCode string, within time.Duration) error {
+func fetchAndNotifyPlans(ctx context.Context, deviceCnt int, deviceName, localeCode string, within time.Duration) error {
 	clis, err := gcal.GetClients(ctx)
 	if err != nil {
 		return err
@@ -93,7 +95,7 @@ func fetchAndNotifyPlans(ctx context.Context, localeCode string, within time.Dur
 	locale := locale.GetLocale(localeCode)
 	for _, events := range eventsList {
 		for _, event := range events {
-			if err := notifyWithCtx(ctx, locale.Code(), locale.NotifyMessage(event.Start, event.Title)); err != nil {
+			if err := notifyWithCtx(ctx, deviceCnt, deviceName, locale.Code(), locale.NotifyMessage(event.Start, event.Title)); err != nil {
 				errs = append(errs, err)
 			}
 		}
@@ -101,13 +103,13 @@ func fetchAndNotifyPlans(ctx context.Context, localeCode string, within time.Dur
 	return checkErrs(errs)
 }
 
-func notifyWithCtx(ctx context.Context, locale, msg string) error {
-	devices := cast.LookupAndConnect(ctx)
+func notifyWithCtx(ctx context.Context, deviceCnt int, friendlyName, locale, msg string) error {
+	devices := googlecast.LookupAndConnect(ctx, deviceCnt, friendlyName)
 	var wg sync.WaitGroup
 	errChan := make(chan error, len(devices))
 	for _, device := range devices {
 		wg.Add(1)
-		go func(ctx context.Context, device *cast.CastDevice, wg *sync.WaitGroup) {
+		go func(ctx context.Context, device *googlecast.CastDevice, wg *sync.WaitGroup) {
 			defer wg.Done()
 			if err := device.Speak(ctx, msg, locale); err != nil {
 				errChan <- err
@@ -167,10 +169,13 @@ func checkErrs(errs []error) (err error) {
 }
 
 func simpleServe(c *cli.Context) error {
-	return httpRun(c.Context, "ja", c.Int("port"))
+	deviceCnt := c.Int("device-count")
+	deviceName := c.String("device-name")
+
+	return httpRun(c.Context, deviceCnt, deviceName, "ja", c.Int("port"))
 }
 
-func httpRun(ctx context.Context, localeCode string, port int) error {
+func httpRun(ctx context.Context, deviceCnt int, deviceName, localeCode string, port int) error {
 	handler := http.NewServeMux()
 	handler.HandleFunc("/notify", func(w http.ResponseWriter, req *http.Request) {
 		switch req.Method {
@@ -180,7 +185,7 @@ func httpRun(ctx context.Context, localeCode string, port int) error {
 				io.WriteString(w, "Internal error\n")
 				return
 			}
-			if err := notifyWithCtx(ctx, localeCode, string(b)); err != nil {
+			if err := notifyWithCtx(ctx, deviceCnt, deviceName, localeCode, string(b)); err != nil {
 				io.WriteString(w, "Internal error\n")
 				return
 			}
