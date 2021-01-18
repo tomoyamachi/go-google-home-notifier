@@ -57,9 +57,12 @@ func LookupAndConnect(ctx context.Context, max int, friendryName string) []*Cast
 			}
 		}
 	}(ctx, friendryName)
-	mdns.Lookup(googleCastServiceName, entriesCh)
+	err := mdns.Lookup(googleCastServiceName, entriesCh)
 	close(entriesCh)
 	close(resultCh)
+	if err != nil {
+		return nil
+	}
 	results := make([]*CastDevice, 0, max)
 	for cast := range resultCh {
 		if cast != nil {
