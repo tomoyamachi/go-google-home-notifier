@@ -78,10 +78,12 @@ func regularNotify(ctx context.Context, deviceCnt int, deviceName, localeCode st
 	for {
 		select {
 		case <-ticker.C:
-			log.Print("run fetchAndNotifyPlans")
+			log.Print("fetch plans and send notifications")
 			if err := fetchAndNotifyPlans(ctx, deviceCnt, deviceName, localeCode, within); err != nil {
 				log.Print(err)
 			}
+		case <-ctx.Done():
+			return nil
 		}
 	}
 }
