@@ -9,67 +9,74 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
+var (
+	notifyFlags = []cli.Flag{
+		&cli.StringFlag{
+			Name:  "device-name",
+			Usage: "Target Google Home device name. Default notify from all found devices",
+		},
+		&cli.IntFlag{
+			Name:  "device-count",
+			Value: 4,
+			Usage: "Maximum number of detected Google Home devices",
+		},
+		&cli.StringFlag{
+			Name:    "locale",
+			Aliases: []string{"l"},
+			Value:   "en",
+			Usage:   "Locale code of notifications",
+		},
+	}
+
+	serverFlags = []cli.Flag{
+		&cli.IntFlag{
+			Name:    "port",
+			Aliases: []string{"p"},
+			Value:   8000,
+		},
+	}
+)
+
 func main() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	app := &cli.App{
-		Flags: []cli.Flag{
-			&cli.StringFlag{
-				Name:  "device-name",
-				Usage: "target google home device name. default notify from all found devices.",
-			},
-			&cli.IntFlag{
-				Name:  "device-count",
-				Value: 4,
-				Usage: "max google home device count.",
-			},
-		},
 		Commands: []*cli.Command{
 			{
 				Name:    "daemon",
 				Aliases: []string{"d"},
-				Usage:   "start notifyFromDevices daemon",
-				Flags: []cli.Flag{
+				Usage:   "Start daemon (run server and check calendars regularly)",
+				Flags: append(
+					append(notifyFlags, serverFlags...),
 					&cli.DurationFlag{
 						Name:    "notify-duration",
 						Aliases: []string{"n"},
 						Value:   time.Minute * 30,
-						Usage:   "interval between fetch plans and notifyFromDevices",
+						Usage:   "Interval between fetch plans and notify",
 					},
 					&cli.DurationFlag{
 						Name:    "within",
 						Aliases: []string{"w"},
 						Value:   time.Hour * 3,
-						Usage:   "fetch plans within target duration from google calendar",
+						Usage:   "Fetch plans within target duration from Google Calendars",
 					},
-					&cli.StringFlag{
-						Name:    "locale",
-						Aliases: []string{"l"},
-						Value:   "ja",
-						Usage:   "message locale code",
-					},
-					&cli.IntFlag{
-						Name:    "port",
-						Aliases: []string{"p"},
-						Value:   8000,
-					},
-				},
+				),
 				Action: startDaemon,
 			},
 			{
 				Name:    "calendar",
 				Aliases: []string{"c"},
-				Usage:   "about google calendar",
+				Usage:   "About google calendar",
 				Subcommands: []*cli.Command{
 					{
 						Name:    "add-token",
 						Aliases: []string{"a"},
-						Usage:   "add google account",
+						Usage:   "Register a new Google Calendar account",
 						Action:  addToken,
 					},
 					{
 						Name:    "fetch-plan",
 						Aliases: []string{"f"},
-						Usage:   "fetch google calendar",
+						Usage:   "Fetch from registered Google Calendars",
 						Action:  fetchAndShowPlans,
 						Flags: []cli.Flag{
 							&cli.Int64Flag{
@@ -90,31 +97,20 @@ func main() {
 			},
 			{
 				Name:  "notify",
-				Usage: "simple notify with message",
-				Flags: []cli.Flag{
-					&cli.StringFlag{
-						Name:    "locale",
-						Aliases: []string{"l"},
-						Value:   "en",
-					},
+				Usage: "Notify a message",
+				Flags: append(notifyFlags,
 					&cli.StringFlag{
 						Name:    "message",
 						Aliases: []string{"m"},
 						Value:   "Hello, world!!",
 					},
-				},
+				),
 				Action: notifyFromDevices,
 			},
 			{
-				Name:  "server",
-				Usage: "run server",
-				Flags: []cli.Flag{
-					&cli.IntFlag{
-						Name:    "port",
-						Aliases: []string{"p"},
-						Value:   8000,
-					},
-				},
+				Name:   "server",
+				Usage:  "Run server",
+				Flags:  serverFlags,
 				Action: simpleServe,
 			},
 		},
