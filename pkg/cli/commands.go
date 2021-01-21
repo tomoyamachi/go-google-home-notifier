@@ -3,7 +3,6 @@ package cli
 import (
 	"context"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -21,14 +20,12 @@ import (
 	"github.com/tomoyamachi/notifyhome/pkg/locale"
 )
 
+// calendar add-token Action
 func addToken(c *cli.Context) error {
 	return gcal.AddToken(c.Context)
 }
 
-func notifyFromDevices(c *cli.Context) error {
-	return notifyWithCtx(c.Context, c.Int("device-count"), c.String("device-name"), c.String("locale"), c.String("message"))
-}
-
+// calendar fetch-plan Action
 func fetchAndShowPlans(c *cli.Context) error {
 	clis, err := gcal.GetClients(c.Context)
 	if err != nil {
@@ -43,10 +40,23 @@ func fetchAndShowPlans(c *cli.Context) error {
 	return checkErrs(errs)
 }
 
+// notify Action
+func notifyFromDevices(c *cli.Context) error {
+	return notifyWithCtx(c.Context, c.Int("device-count"), c.String("device-name"), c.String("locale"), c.String("message"))
+}
+
+// server Action
+func simpleServe(c *cli.Context) error {
+	deviceCnt := c.Int("device-count")
+	deviceName := c.String("device-name")
+
+	return httpRun(c.Context, deviceCnt, deviceName, "ja", c.Int("port"))
+}
+
+// daemon Action
 func startDaemon(c *cli.Context) error {
 	log.Print("Start daemon.")
-	eg, ctx := errgroup.WithContext(c.Context)
-	ctx, cancel := context.WithCancel(ctx)
+	ctx, cancel := context.WithCancel(c.Context)
 	defer cancel()
 	killSignal := make(chan os.Signal, 1)
 	signal.Notify(killSignal, os.Interrupt, syscall.SIGTERM)
@@ -56,6 +66,7 @@ func startDaemon(c *cli.Context) error {
 		cancel()
 	}()
 
+	eg, ctx := errgroup.WithContext(ctx)
 	localeCode := c.String("locale")
 	deviceCnt := c.Int("device-count")
 	deviceName := c.String("device-name")
@@ -160,23 +171,6 @@ func getEventsAndEror(clis []*http.Client, cnt int64, within time.Duration) ([][
 	return eventsList, errs
 }
 
-func checkErrs(errs []error) (err error) {
-	if len(errs) == 0 {
-		return nil
-	}
-	for _, err = range errs {
-		log.Print(err)
-	}
-	return err // temporary, return a last error
-}
-
-func simpleServe(c *cli.Context) error {
-	deviceCnt := c.Int("device-count")
-	deviceName := c.String("device-name")
-
-	return httpRun(c.Context, deviceCnt, deviceName, "ja", c.Int("port"))
-}
-
 func httpRun(ctx context.Context, deviceCnt int, deviceName, localeCode string, port int) error {
 	handler := http.NewServeMux()
 	handler.HandleFunc("/notify", func(w http.ResponseWriter, req *http.Request) {
@@ -184,27 +178,17 @@ func httpRun(ctx context.Context, deviceCnt int, deviceName, localeCode string, 
 		case http.MethodPost:
 			b, err := ioutil.ReadAll(req.Body)
 			if err != nil {
-				if _, err := io.WriteString(w, "Internal error\n"); err != nil {
-					log.Printf("write to body %+v\n", err)
-				}
+				writeResponse(w, []byte("Internal error\n"))
 				return
 			}
 			if err := notifyWithCtx(ctx, deviceCnt, deviceName, localeCode, string(b)); err != nil {
 				log.Printf("notifyWithCtx %+v\n", err)
-				if _, err := io.WriteString(w, "Internal error\n"); err != nil {
-					log.Printf("write to body %+v\n", err)
-				}
+				writeResponse(w, []byte("Internal error\n"))
 				return
 			}
-			if _, err := w.Write(b); err != nil {
-				log.Printf("write to body %+v\n", err)
-			}
-			return
+			writeResponse(w, b)
 		default:
-			if _, err := io.WriteString(w, "Invalid methods\n"); err != nil {
-				log.Printf("write to body %+v\n", err)
-			}
-			return
+			writeResponse(w, []byte("Invalid methods\n"))
 		}
 	})
 	server := &http.Server{Addr: fmt.Sprintf(":%d", port), Handler: handler}
@@ -220,4 +204,20 @@ func httpRun(ctx context.Context, deviceCnt int, deviceName, localeCode string, 
 		return err
 	}
 	return nil
+}
+
+func writeResponse(w http.ResponseWriter, b []byte) {
+	if _, err := w.Write(b); err != nil {
+		log.Printf("write to body %+v\n", err)
+	}
+}
+
+func checkErrs(errs []error) (err error) {
+	if len(errs) == 0 {
+		return nil
+	}
+	for _, err = range errs {
+		log.Print(err)
+	}
+	return err // temporary, return a last error
 }
