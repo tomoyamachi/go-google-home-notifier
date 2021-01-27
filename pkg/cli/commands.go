@@ -3,7 +3,6 @@ package cli
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
@@ -18,6 +17,7 @@ import (
 	"github.com/tomoyamachi/notifyhome/pkg/gcal"
 	"github.com/tomoyamachi/notifyhome/pkg/googlecast"
 	"github.com/tomoyamachi/notifyhome/pkg/locale"
+	"github.com/tomoyamachi/notifyhome/pkg/server"
 )
 
 // calendar add-token Action
@@ -42,7 +42,7 @@ func fetchAndShowPlans(c *cli.Context) error {
 
 // notify Action
 func notifyFromDevices(c *cli.Context) error {
-	return notifyWithCtx(c.Context, c.Int("device-count"), c.String("device-name"), c.String("locale"), c.String("message"))
+	return googlecast.Notify(c.Context, c.Int("device-count"), c.String("device-name"), c.String("locale"), []string{c.String("message")})
 }
 
 // server Action
@@ -50,7 +50,7 @@ func simpleServe(c *cli.Context) error {
 	deviceCnt := c.Int("device-count")
 	deviceName := c.String("device-name")
 
-	return httpRun(c.Context, deviceCnt, deviceName, "ja", c.Int("port"))
+	return server.Run(c.Context, deviceCnt, deviceName, "ja", c.Int("port"))
 }
 
 // daemon Action
@@ -74,7 +74,7 @@ func startDaemon(c *cli.Context) error {
 		return regularNotify(ctx, deviceCnt, deviceName, localeCode, c.Duration("notify-duration"), c.Duration("within"))
 	})
 	eg.Go(func() error {
-		return httpRun(ctx, deviceCnt, deviceName, localeCode, c.Int("port"))
+		return server.Run(ctx, deviceCnt, deviceName, localeCode, c.Int("port"))
 	})
 
 	return eg.Wait()
@@ -106,35 +106,19 @@ func fetchAndNotifyPlans(ctx context.Context, deviceCnt int, deviceName, localeC
 	}
 	eventsList, errs := getEventsAndEror(clis, 1, within)
 	locale := locale.GetLocale(localeCode)
+
+	eventMsgs := []string{}
 	for _, events := range eventsList {
 		for _, event := range events {
-			if err := notifyWithCtx(ctx, deviceCnt, deviceName, locale.Code(), locale.NotifyMessage(event.Start, event.Title)); err != nil {
-				errs = append(errs, err)
+			if event.Start.After(time.Now()) {
+				eventMsgs = append(eventMsgs, locale.NotifyMessage(event.Start, event.Title))
 			}
 		}
 	}
+	if err := googlecast.Notify(ctx, deviceCnt, deviceName, locale.Code(), eventMsgs); err != nil {
+		errs = append(errs, err)
+	}
 	return checkErrs(errs)
-}
-
-func notifyWithCtx(ctx context.Context, deviceCnt int, friendlyName, locale, msg string) error {
-	devices := googlecast.LookupAndConnect(ctx, deviceCnt, friendlyName)
-	var wg sync.WaitGroup
-	errChan := make(chan error, len(devices))
-	for _, device := range devices {
-		wg.Add(1)
-		go func(ctx context.Context, device *googlecast.CastDevice, wg *sync.WaitGroup) {
-			defer wg.Done()
-			if err := device.Speak(ctx, msg, locale); err != nil {
-				errChan <- err
-			}
-		}(ctx, device, &wg)
-	}
-	wg.Wait()
-	close(errChan)
-	for err := range errChan {
-		return err
-	}
-	return nil
 }
 
 func getEventsAndEror(clis []*http.Client, cnt int64, within time.Duration) ([][]*gcal.Event, []error) {
@@ -169,47 +153,6 @@ func getEventsAndEror(clis []*http.Client, cnt int64, within time.Duration) ([][
 		errs = append(errs, err)
 	}
 	return eventsList, errs
-}
-
-func httpRun(ctx context.Context, deviceCnt int, deviceName, localeCode string, port int) error {
-	handler := http.NewServeMux()
-	handler.HandleFunc("/notify", func(w http.ResponseWriter, req *http.Request) {
-		switch req.Method {
-		case http.MethodPost:
-			b, err := ioutil.ReadAll(req.Body)
-			if err != nil {
-				writeResponse(w, []byte("Internal error\n"))
-				return
-			}
-			if err := notifyWithCtx(ctx, deviceCnt, deviceName, localeCode, string(b)); err != nil {
-				log.Printf("notifyWithCtx %+v\n", err)
-				writeResponse(w, []byte("Internal error\n"))
-				return
-			}
-			writeResponse(w, b)
-		default:
-			writeResponse(w, []byte("Invalid methods\n"))
-		}
-	})
-	server := &http.Server{Addr: fmt.Sprintf(":%d", port), Handler: handler}
-	go func() {
-		<-ctx.Done()
-		log.Print("httpRun will be stop...")
-		if err := server.Shutdown(ctx); err != nil {
-			log.Printf("http server shutdown: %+v\n", err)
-		}
-	}()
-	log.Printf("server start on port: %d\n", port)
-	if err := server.ListenAndServe(); err != nil {
-		return err
-	}
-	return nil
-}
-
-func writeResponse(w http.ResponseWriter, b []byte) {
-	if _, err := w.Write(b); err != nil {
-		log.Printf("write to body %+v\n", err)
-	}
 }
 
 func checkErrs(errs []error) (err error) {

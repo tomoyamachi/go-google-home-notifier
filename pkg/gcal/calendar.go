@@ -22,6 +22,7 @@ type (
 	Event  struct {
 		Title string
 		Start time.Time
+		End   time.Time
 	}
 )
 
@@ -37,7 +38,7 @@ func getConfig() (*oauth2.Config, error) {
 	return config, nil
 }
 
-// Retrieve a token, saves the token, then returns the generated client.
+// Retrieve saved token, then returns the generated client.
 func GetClients(ctx context.Context) ([]*http.Client, error) {
 	config, err := getConfig()
 	if err != nil {
@@ -64,7 +65,7 @@ func FetchEvents(cli *http.Client, max int64, duration time.Duration) ([]*Event,
 	es := make([]*Event, len(events))
 	for idx, item := range events {
 		var e *Event
-		if e, err = parseEvent(item); err != nil {
+		if e, err = convertEvent(item); err != nil {
 			return nil, err
 		}
 		es[idx] = e
@@ -81,7 +82,7 @@ func fetchFromGoogle(cli *http.Client, max int64, duration time.Duration) ([]*ca
 	call := srv.Events.List("primary").ShowDeleted(false).
 		SingleEvents(true).TimeMin(t).MaxResults(max).OrderBy("startTime")
 	if duration > 0 {
-		call.TimeMax(time.Now().Add(duration).Format(time.RFC3339))
+		call = call.TimeMax(time.Now().Add(duration).Format(time.RFC3339))
 	}
 	events, err := call.Do()
 	if err != nil {
@@ -90,14 +91,27 @@ func fetchFromGoogle(cli *http.Client, max int64, duration time.Duration) ([]*ca
 	return events.Items, nil
 }
 
-func parseEvent(item *calendar.Event) (*Event, error) {
-	date := item.Start.DateTime
-	if date == "" {
-		date = item.Start.Date
-	}
-	tm, err := time.Parse(time.RFC3339, date)
+func convertEvent(item *calendar.Event) (*Event, error) {
+	start, err := parseEventTime(item.Start)
 	if err != nil {
-		return nil, fmt.Errorf("parse event time: %w", err)
+		return nil, err
 	}
-	return &Event{Start: tm, Title: item.Summary}, nil
+	end, err := parseEventTime(item.End)
+	if err != nil {
+		return nil, err
+	}
+
+	return &Event{Start: start, End: end, Title: item.Summary}, nil
+}
+
+func parseEventTime(e *calendar.EventDateTime) (time.Time, error) {
+	start := e.DateTime
+	if start == "" {
+		start = e.Date
+	}
+	tm, err := time.Parse(time.RFC3339, start)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("parse event time: %w", err)
+	}
+	return tm, nil
 }
