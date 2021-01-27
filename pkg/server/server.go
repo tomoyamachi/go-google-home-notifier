@@ -20,7 +20,7 @@ func Run(ctx context.Context, deviceCnt int, deviceName, localeCode string, port
 				writeResponse(w, []byte("Internal error\n"))
 				return
 			}
-			if err := googlecast.Notify(ctx, deviceCnt, deviceName, localeCode, string(b)); err != nil {
+			if err := googlecast.Notify(ctx, deviceCnt, deviceName, localeCode, []string{string(b)}); err != nil {
 				log.Printf("notifyWithCtx %+v\n", err)
 				writeResponse(w, []byte("Internal error\n"))
 				return

@@ -42,7 +42,7 @@ func fetchAndShowPlans(c *cli.Context) error {
 
 // notify Action
 func notifyFromDevices(c *cli.Context) error {
-	return googlecast.Notify(c.Context, c.Int("device-count"), c.String("device-name"), c.String("locale"), c.String("message"))
+	return googlecast.Notify(c.Context, c.Int("device-count"), c.String("device-name"), c.String("locale"), []string{c.String("message")})
 }
 
 // server Action
@@ -106,12 +106,17 @@ func fetchAndNotifyPlans(ctx context.Context, deviceCnt int, deviceName, localeC
 	}
 	eventsList, errs := getEventsAndEror(clis, 1, within)
 	locale := locale.GetLocale(localeCode)
+
+	eventMsgs := []string{}
 	for _, events := range eventsList {
 		for _, event := range events {
-			if err := googlecast.Notify(ctx, deviceCnt, deviceName, locale.Code(), locale.NotifyMessage(event.Start, event.Title)); err != nil {
-				errs = append(errs, err)
+			if event.Start.After(time.Now()) {
+				eventMsgs = append(eventMsgs, locale.NotifyMessage(event.Start, event.Title))
 			}
 		}
+	}
+	if err := googlecast.Notify(ctx, deviceCnt, deviceName, locale.Code(), eventMsgs); err != nil {
+		errs = append(errs, err)
 	}
 	return checkErrs(errs)
 }
