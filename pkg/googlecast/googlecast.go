@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/url"
 	"strings"
+	"sync"
 
 	cast "github.com/barnybug/go-cast"
 	"github.com/barnybug/go-cast/controllers"
@@ -50,6 +51,17 @@ func LookupAndConnect(ctx context.Context, max int, friendryName string) []*Cast
 	// https://github.com/hashicorp/mdns
 	entriesCh := make(chan *mdns.ServiceEntry, max)
 	resultCh := make(chan *CastDevice, max)
+	wg := new(sync.WaitGroup)
+	go func(ctx context.Context, friendryName string) {
+		for entry := range entriesCh {
+			wg.Add(1)
+			if cast := lookupClient(ctx, entry, friendryName); cast != nil {
+				resultCh <- cast
+			}
+			wg.Done()
+		}
+	}(ctx, friendryName)
+
 	go func(ctx context.Context, friendryName string) {
 		for entry := range entriesCh {
 			if cast := lookupClient(ctx, entry, friendryName); cast != nil {
@@ -58,11 +70,13 @@ func LookupAndConnect(ctx context.Context, max int, friendryName string) []*Cast
 		}
 	}(ctx, friendryName)
 	err := mdns.Lookup(googleCastServiceName, entriesCh)
-	close(entriesCh)
-	close(resultCh)
 	if err != nil {
 		return nil
 	}
+
+	close(entriesCh)
+	wg.Wait()
+	close(resultCh)
 	results := make([]*CastDevice, 0, max)
 	for cast := range resultCh {
 		if cast != nil {

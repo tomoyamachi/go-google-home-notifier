@@ -115,6 +115,10 @@ func fetchAndNotifyPlans(ctx context.Context, deviceCnt int, deviceName, localeC
 			}
 		}
 	}
+	if len(eventMsgs) == 0 {
+		log.Println("no messages")
+		return nil
+	}
 	if err := googlecast.Notify(ctx, deviceCnt, deviceName, locale.Code(), eventMsgs); err != nil {
 		errs = append(errs, err)
 	}

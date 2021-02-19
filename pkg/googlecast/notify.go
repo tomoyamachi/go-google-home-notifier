@@ -2,30 +2,30 @@ package googlecast
 
 import (
 	"context"
-	"sync"
+	"log"
 	"time"
 )
 
 func Notify(ctx context.Context, deviceCnt int, friendlyName, locale string, msgs []string) error {
-	devices := LookupAndConnect(ctx, deviceCnt, friendlyName)
-	var wg sync.WaitGroup
-	errChan := make(chan error, len(devices)*len(msgs))
-	for _, device := range devices {
-		wg.Add(1)
-		go func(ctx context.Context, device *CastDevice, wg *sync.WaitGroup) {
-			defer wg.Done()
-			for _, msg := range msgs {
-				if err := device.Speak(ctx, msg, locale); err != nil {
-					errChan <- err
-				}
-				time.Sleep(time.Second * 3)
-			}
-		}(ctx, device, &wg)
+	if len(msgs) == 0 {
+		return nil
 	}
-	wg.Wait()
-	close(errChan)
+	devices := LookupAndConnect(ctx, deviceCnt, friendlyName)
+	if len(devices) == 0 {
+		log.Print("no device found.")
+		return nil
+	}
+	errs := []error{}
+	for _, device := range devices {
+		for _, msg := range msgs {
+			if err := device.Speak(ctx, msg, locale); err != nil {
+				errs = append(errs, err)
+			}
+			time.Sleep(time.Second * 10)
+		}
+	}
 	// TODO: fix: Only return first error
-	for err := range errChan {
+	for _, err := range errs {
 		return err
 	}
 	return nil
