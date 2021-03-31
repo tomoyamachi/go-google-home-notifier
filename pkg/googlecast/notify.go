@@ -17,11 +17,14 @@ func Notify(ctx context.Context, deviceCnt int, friendlyName, locale string, msg
 	}
 	errs := []error{}
 	for _, device := range devices {
-		for _, msg := range msgs {
+		for idx, msg := range msgs {
+			if idx != 0 {
+				time.Sleep(time.Second * 10)
+			}
+
 			if err := device.Speak(ctx, msg, locale); err != nil {
 				errs = append(errs, err)
 			}
-			time.Sleep(time.Second * 10)
 		}
 	}
 	// TODO: fix: Only return first error

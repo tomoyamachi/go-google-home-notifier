@@ -7,11 +7,12 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+	"time"
 
 	cast "github.com/barnybug/go-cast"
 	"github.com/barnybug/go-cast/controllers"
 	castnet "github.com/barnybug/go-cast/net"
-	"github.com/micro/mdns"
+	"github.com/hashicorp/mdns"
 )
 
 const (
@@ -54,6 +55,7 @@ func LookupAndConnect(ctx context.Context, max int, friendryName string) []*Cast
 	wg := new(sync.WaitGroup)
 	go func(ctx context.Context, friendryName string) {
 		for entry := range entriesCh {
+			log.Printf("got entry %v\n", entry)
 			wg.Add(1)
 			if cast := lookupClient(ctx, entry, friendryName); cast != nil {
 				resultCh <- cast
@@ -62,23 +64,22 @@ func LookupAndConnect(ctx context.Context, max int, friendryName string) []*Cast
 		}
 	}(ctx, friendryName)
 
-	go func(ctx context.Context, friendryName string) {
-		for entry := range entriesCh {
-			if cast := lookupClient(ctx, entry, friendryName); cast != nil {
-				resultCh <- cast
-			}
-		}
-	}(ctx, friendryName)
-	err := mdns.Lookup(googleCastServiceName, entriesCh)
-	if err != nil {
+	p := mdns.QueryParam{
+		Service:             googleCastServiceName,
+		Domain:              "local",
+		Timeout:             time.Second * 15,
+		Entries:             entriesCh,
+		WantUnicastResponse: false, // TODO(reddaly): Change this default.
+	}
+	if err := mdns.Query(&p); err != nil {
 		return nil
 	}
-
 	close(entriesCh)
 	wg.Wait()
 	close(resultCh)
 	results := make([]*CastDevice, 0, max)
 	for cast := range resultCh {
+		fmt.Printf("%v\n", cast)
 		if cast != nil {
 			results = append(results, cast)
 		}
@@ -125,11 +126,23 @@ func tts(text, lang string) (*url.URL, error) {
 // Play plays media contents on cast device
 func (g *CastDevice) Play(ctx context.Context, url *url.URL) error {
 	conn := castnet.NewConnection()
+	log.Printf("device client %v\n", g.client)
+	if g.client == nil {
+		log.Println("client pointer is nil")
+		return nil
+	}
 	if err := conn.Connect(ctx, g.AddrV4, g.Port); err != nil {
 		return err
 	}
-	defer conn.Close()
-	status, err := g.client.Receiver().LaunchApp(ctx, cast.AppMedia)
+	if conn != nil {
+		defer conn.Close()
+	}
+	rec := g.client.Receiver()
+	if rec == nil {
+		log.Printf("client does not have receiver %v", g.client)
+		return nil
+	}
+	status, err := rec.LaunchApp(ctx, cast.AppMedia)
 	if err != nil {
 		return err
 	}

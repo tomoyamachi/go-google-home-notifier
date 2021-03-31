@@ -5,7 +5,7 @@ go 1.14
 require (
 	cloud.google.com/go v0.75.0 // indirect
 	github.com/barnybug/go-cast v0.0.0-20201201064555-a87ccbc26692
-	github.com/micro/mdns v0.3.0
+	github.com/hashicorp/mdns v1.0.3
 	github.com/urfave/cli/v2 v2.3.0
 	golang.org/x/net v0.0.0-20201224014010-6772e930b67b
 	golang.org/x/oauth2 v0.0.0-20210113205817-d3ed898aa8a3
