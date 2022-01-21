@@ -3,7 +3,6 @@ package googlecast
 import (
 	"context"
 	"log"
-	"time"
 )
 
 func Notify(ctx context.Context, deviceCnt int, friendlyName, locale string, msgs []string) error {
@@ -18,10 +17,7 @@ func Notify(ctx context.Context, deviceCnt int, friendlyName, locale string, msg
 	errs := []error{}
 	for _, device := range devices {
 		totalMsg := ""
-		for idx, msg := range msgs {
-			if idx != 0 {
-				time.Sleep(time.Second * 10)
-			}
+		for _, msg := range msgs {
 			totalMsg += msg
 		}
 
