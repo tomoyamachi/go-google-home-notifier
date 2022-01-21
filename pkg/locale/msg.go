@@ -27,7 +27,7 @@ type Ja struct{}
 
 func (_ Ja) Code() string { return "ja" }
 func (_ Ja) NotifyMessage(start time.Time, title string) string {
-	return fmt.Sprintf("%s から %s", start.Format("01月02日の15:04"), title)
+	return fmt.Sprintf("%s から %s。", start.Format("01月02日の15:04"), title)
 }
 
 type En struct{}

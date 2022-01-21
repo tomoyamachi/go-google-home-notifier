@@ -53,7 +53,7 @@ func App() *cli.App {
 					&cli.DurationFlag{
 						Name:    "within",
 						Aliases: []string{"w"},
-						Value:   time.Hour * 3,
+						Value:   time.Hour * 2,
 						Usage:   "Fetch plans within target duration from Google Calendars",
 					},
 				),
