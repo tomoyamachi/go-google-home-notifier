@@ -13,6 +13,7 @@ import (
 
 func Run(ctx context.Context, deviceCnt int, deviceName, localeCode string, port int) error {
 	handler := http.NewServeMux()
+	handler.HandleFunc("/quiet", makeQuiet)
 	handler.HandleFunc("/notify", func(w http.ResponseWriter, req *http.Request) {
 		if req.Method != http.MethodPost {
 			writeResponse(w, []byte("Invalid methods\n"))
@@ -30,15 +31,6 @@ func Run(ctx context.Context, deviceCnt int, deviceName, localeCode string, port
 		}
 		writeResponse(w, b)
 	})
-	handler.HandleFunc("/quiet", func(w http.ResponseWriter, req *http.Request) {
-		if req.Method != http.MethodGet {
-			writeResponse(w, []byte("Invalid methods\n"))
-			return
-		}
-		targetTime := time.Now().Add(24 * time.Hour)
-		googlecast.SetNotifyAfter(targetTime)
-		writeResponse(w, []byte(fmt.Sprintf("I will be quiet until %s\n", targetTime.Format("2006/01/02 15:04"))))
-	})
 	server := &http.Server{Addr: fmt.Sprintf(":%d", port), Handler: handler}
 	go func() {
 		<-ctx.Done()
@@ -52,6 +44,16 @@ func Run(ctx context.Context, deviceCnt int, deviceName, localeCode string, port
 		return err
 	}
 	return nil
+}
+
+func makeQuiet(w http.ResponseWriter, req *http.Request) {
+	if req.Method != http.MethodGet {
+		writeResponse(w, []byte("Invalid methods\n"))
+		return
+	}
+	targetTime := time.Now().Add(12 * time.Hour)
+	googlecast.SetNotifyAfter(targetTime)
+	writeResponse(w, []byte(fmt.Sprintf("I will be quiet until %s\n", targetTime.Format("2006/01/02 15:04"))))
 }
 
 func writeResponse(w http.ResponseWriter, b []byte) {
