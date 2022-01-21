@@ -49,3 +49,28 @@ notify daemon
 2. Go to the link and authorize.
 3. Input authorization code to terminal.
 4. Create or modify `tokens.json`
+
+## Run as daemon
+
+```
+chmod +x google-home-notifier
+mv google-home-notifier /usr/local/sbin/
+
+mv /path/to/google-home-notifier.service /usr/lib/systemd/system/google-home-notifier.service
+
+# Regist new service to systemd
+systemctl daemon-reload
+systemctl start google-home-notifier.service
+
+# Check systemd status
+systemctl status git-daemon
+● git-daemon.service - Git Daemon for Malware
+   Loaded: loaded (/usr/lib/systemd/system/git-daemon.service; disabled; vendor preset: disabled)
+   Active: active (running) since Tue 2021-08-17 14:23:58 UTC; 5s ago
+  Process: 23292 ExecStop=/bin/kill -KILL $MAINPID (code=exited, status=1/FAILURE)
+ Main PID: 23347 (git-daemon)
+    Tasks: 4
+   Memory: 1.1M
+   CGroup: /system.slice/git-daemon.service
+           └─23347 /usr/local/sbin/git-daemon --file /var/git-daemon/config.yml --log-file /var/log/git-daemon.log
+```

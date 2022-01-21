@@ -1,0 +1,18 @@
+[Unit]
+Description=Send notifications to Google Home
+Before=network.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/sbin/google-home-notifier
+ExecStop=/bin/kill -KILL $MAINPID
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=always
+RemainAfterExit=no
+PIDFile=/var/run/google-home-notifier
+User=root
+KillMode=process
+SuccessExitStatus=137 1
+
+[Install]
+WantedBy=multi-user.target
