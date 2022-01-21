@@ -17,12 +17,16 @@ func Notify(ctx context.Context, deviceCnt int, friendlyName, locale string, msg
 	}
 	errs := []error{}
 	for _, device := range devices {
+		totalMsg := ""
 		for idx, msg := range msgs {
 			if idx != 0 {
 				time.Sleep(time.Second * 10)
 			}
+			totalMsg += msg
+		}
 
-			if err := device.Speak(ctx, msg, locale); err != nil {
+		if len(totalMsg) > 0 {
+			if err := device.Speak(ctx, totalMsg, locale); err != nil {
 				errs = append(errs, err)
 			}
 		}
