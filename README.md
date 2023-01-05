@@ -47,8 +47,9 @@ notify daemon
 
 1. Run `notify calendar add-token` then show OAuth URL.
 2. Go to the link and authorize.
-3. Input authorization code to terminal.
-4. Create or modify `tokens.json`
+3. Copy a authorization code from an URL parameter: `http://localhost/?state=state-token&code=<authz-code-is-here>&scope=https://www.googleapis.com/auth/calendar.readonly`
+4. Input authorization code to terminal.
+5. Create or modify `tokens.json`
 
 ## Run as daemon
 
