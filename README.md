@@ -54,24 +54,30 @@ notify daemon
 ## Run as daemon
 
 ```
-chmod +x google-home-notifier
-mv google-home-notifier /usr/local/sbin/
+$ chmod +x notify
+$ mv notify /usr/local/sbin/google-home-notifier
 
-mv /path/to/google-home-notifier.service /usr/lib/systemd/system/google-home-notifier.service
+$ mkdir /etc/google-home-notifier
+$ mv google-credentialfile.json /etc/google-home-notifier/credentials.json
+$ google-home-notifier calendar add-token --path /etc/google-home-notifier/
 
+
+$ mv /path/to/google-home-notifier.service /usr/lib/systemd/system/google-home-notifier.service
 # Regist new service to systemd
-systemctl daemon-reload
-systemctl start google-home-notifier.service
+$ systemctl start google-home-notifier.service
 
 # Check systemd status
-systemctl status git-daemon
-● git-daemon.service - Git Daemon for Malware
-   Loaded: loaded (/usr/lib/systemd/system/git-daemon.service; disabled; vendor preset: disabled)
-   Active: active (running) since Tue 2021-08-17 14:23:58 UTC; 5s ago
-  Process: 23292 ExecStop=/bin/kill -KILL $MAINPID (code=exited, status=1/FAILURE)
- Main PID: 23347 (git-daemon)
-    Tasks: 4
-   Memory: 1.1M
-   CGroup: /system.slice/git-daemon.service
-           └─23347 /usr/local/sbin/git-daemon --file /var/git-daemon/config.yml --log-file /var/log/git-daemon.log
+systemctl status google-home-notifier.service
+systemctl status google-home-notifier.service
+● google-home-notifier.service - Send notifications to Google Home
+   Loaded: loaded (/lib/systemd/system/google-home-notifier.service; disabled; vendor preset: enabled)
+   Active: active (running) since Fri 2023-01-20 13:54:28 JST; 13s ago
+ Main PID: 9005 (google-home-not)
+    Tasks: 10 (limit: 4915)
+   CGroup: /system.slice/google-home-notifier.service
+           └─9005 /usr/local/sbin/google-home-notifier daemon --path /etc/google-home-notifier/ --locale ja
+
+Jan 20 13:54:28 tomoya-rasp systemd[1]: Started Send notifications to Google Home.
+Jan 20 13:54:28 tomoya-rasp google-home-notifier[9005]: 2023/01/20 13:54:28 commands.go:58: Start daemon.
+Jan 20 13:54:28 tomoya-rasp google-home-notifier[9005]: 2023/01/20 13:54:28 server.go:42: server start on port: 8000
 ```

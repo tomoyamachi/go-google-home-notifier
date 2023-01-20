@@ -4,7 +4,7 @@ Before=network.service
 
 [Service]
 Type=simple
-ExecStart=/usr/local/sbin/google-home-notifier
+ExecStart=/usr/local/sbin/google-home-notifier daemon --path /etc/google-home-notifier/ --locale
 ExecStop=/bin/kill -KILL $MAINPID
 ExecReload=/bin/kill -HUP $MAINPID
 Restart=always
