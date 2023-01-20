@@ -9,8 +9,8 @@ import (
 	"golang.org/x/oauth2"
 )
 
-func AddToken(ctx context.Context) error {
-	config, err := getConfig()
+func AddToken(ctx context.Context, credentialPath string) error {
+	config, err := getConfig(credentialPath)
 	if err != nil {
 		return err
 	}
@@ -20,12 +20,12 @@ func AddToken(ctx context.Context) error {
 		return err
 	}
 
-	tokens, err := loadTokens()
+	tokens, err := loadTokens(credentialPath)
 	if err != nil {
 		return err
 	}
 	tokens = append(tokens, tok)
-	return tokens.save()
+	return tokens.save(credentialPath)
 }
 
 // Request a token from the web, then returns the retrieved token.
@@ -46,13 +46,13 @@ func getTokenFromWeb(ctx context.Context, config *oauth2.Config) (*oauth2.Token,
 }
 
 // Load tokens from file.
-func loadTokens() (ts Tokens, err error) {
-	f, err := os.Open(tokensFile)
+func loadTokens(credentialPath string) (ts Tokens, err error) {
+	f, err := os.Open(credentialPath + tokensFile)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return Tokens{}, nil
 		}
-		return nil, fmt.Errorf("Open %s: %w", tokensFile, err)
+		return nil, fmt.Errorf("Open %s: %w", credentialPath+tokensFile, err)
 	}
 	defer f.Close()
 	if err = json.NewDecoder(f).Decode(&ts); err != nil {
@@ -62,9 +62,9 @@ func loadTokens() (ts Tokens, err error) {
 }
 
 // Saves tokens to a file.
-func (t Tokens) save() error {
-	fmt.Printf("Saving credential file to: %s\n", tokensFile)
-	f, err := os.OpenFile(tokensFile, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0600)
+func (t Tokens) save(credentialPath string) error {
+	fmt.Printf("Saving credential file to: %s\n", credentialPath+tokensFile)
+	f, err := os.OpenFile(credentialPath+tokensFile, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0600)
 	if err != nil {
 		return fmt.Errorf("Save token: %w", err)
 	}

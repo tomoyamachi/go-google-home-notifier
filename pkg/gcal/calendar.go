@@ -26,8 +26,8 @@ type (
 	}
 )
 
-func getConfig() (*oauth2.Config, error) {
-	b, err := ioutil.ReadFile(credentialFile)
+func getConfig(credentialPath string) (*oauth2.Config, error) {
+	b, err := ioutil.ReadFile(credentialPath + credentialFile)
 	if err != nil {
 		return nil, fmt.Errorf("Read google client secret: %w", err)
 	}
@@ -39,13 +39,13 @@ func getConfig() (*oauth2.Config, error) {
 }
 
 // Retrieve saved token, then returns the generated client.
-func GetClients(ctx context.Context) ([]*http.Client, error) {
-	config, err := getConfig()
+func GetClients(ctx context.Context, credentialPath string) ([]*http.Client, error) {
+	config, err := getConfig(credentialPath)
 	if err != nil {
 		return nil, err
 	}
 
-	tokens, err := loadTokens()
+	tokens, err := loadTokens(credentialPath)
 	if err != nil {
 		return nil, err
 	}

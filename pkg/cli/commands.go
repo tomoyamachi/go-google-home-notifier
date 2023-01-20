@@ -22,12 +22,12 @@ import (
 
 // calendar add-token Action
 func addToken(c *cli.Context) error {
-	return gcal.AddToken(c.Context)
+	return gcal.AddToken(c.Context, c.String("path"))
 }
 
 // calendar fetch-plan Action
 func fetchAndShowPlans(c *cli.Context) error {
-	clis, err := gcal.GetClients(c.Context)
+	clis, err := gcal.GetClients(c.Context, c.String("path"))
 	if err != nil {
 		return err
 	}
@@ -68,10 +68,11 @@ func startDaemon(c *cli.Context) error {
 
 	eg, ctx := errgroup.WithContext(ctx)
 	localeCode := c.String("locale")
+	credentialPath := c.String("path")
 	deviceCnt := c.Int("device-count")
 	deviceName := c.String("device-name")
 	eg.Go(func() error {
-		return regularNotify(ctx, deviceCnt, deviceName, localeCode, c.Duration("notify-duration"), c.Duration("within"))
+		return regularNotify(ctx, deviceCnt, deviceName, localeCode, credentialPath, c.Duration("notify-duration"), c.Duration("within"))
 	})
 	eg.Go(func() error {
 		return server.Run(ctx, deviceCnt, deviceName, localeCode, c.Int("port"))
@@ -80,8 +81,8 @@ func startDaemon(c *cli.Context) error {
 	return eg.Wait()
 }
 
-func regularNotify(ctx context.Context, deviceCnt int, deviceName, localeCode string, tick, within time.Duration) error {
-	if err := fetchAndNotifyPlans(ctx, deviceCnt, deviceName, localeCode, within); err != nil {
+func regularNotify(ctx context.Context, deviceCnt int, deviceName, localeCode, credentialPath string, tick, within time.Duration) error {
+	if err := fetchAndNotifyPlans(ctx, deviceCnt, deviceName, localeCode, credentialPath, within); err != nil {
 		return err
 	}
 	ticker := time.NewTicker(tick)
@@ -90,7 +91,7 @@ func regularNotify(ctx context.Context, deviceCnt int, deviceName, localeCode st
 		select {
 		case <-ticker.C:
 			log.Print("fetch plans and send notifications")
-			if err := fetchAndNotifyPlans(ctx, deviceCnt, deviceName, localeCode, within); err != nil {
+			if err := fetchAndNotifyPlans(ctx, deviceCnt, deviceName, localeCode, credentialPath, within); err != nil {
 				log.Print(err)
 			}
 		case <-ctx.Done():
@@ -99,8 +100,8 @@ func regularNotify(ctx context.Context, deviceCnt int, deviceName, localeCode st
 	}
 }
 
-func fetchAndNotifyPlans(ctx context.Context, deviceCnt int, deviceName, localeCode string, within time.Duration) error {
-	clis, err := gcal.GetClients(ctx)
+func fetchAndNotifyPlans(ctx context.Context, deviceCnt int, deviceName, localeCode, credentialPath string, within time.Duration) error {
+	clis, err := gcal.GetClients(ctx, credentialPath)
 	if err != nil {
 		return err
 	}

@@ -24,6 +24,11 @@ var (
 			Value:   "en",
 			Usage:   "Locale code of notifications",
 		},
+		&cli.StringFlag{
+			Name:  "path",
+			Value: "",
+			Usage: "a Directory path name of credential files (credentials.json, tokens.json)",
+		},
 	}
 
 	serverFlags = []cli.Flag{
@@ -69,6 +74,14 @@ func App() *cli.App {
 						Aliases: []string{"a"},
 						Usage:   "Register a new Google Calendar account",
 						Action:  addToken,
+						Flags: []cli.Flag{
+							&cli.StringFlag{
+								Name:    "path",
+								Aliases: []string{"p"},
+								Value:   "",
+								Usage:   "a Directory path name of credential files (credentials.json, tokens.json)",
+							},
+						},
 					},
 					{
 						Name:    "fetch-plan",
@@ -87,6 +100,12 @@ func App() *cli.App {
 								Aliases: []string{"w"},
 								Value:   time.Hour * 24 * 14,
 								Usage:   "fetch plans within target duration from google calendar",
+							},
+							&cli.StringFlag{
+								Name:    "path",
+								Aliases: []string{"p"},
+								Value:   "",
+								Usage:   "a Directory path name of credential files (credentials.json, tokens.json)",
 							},
 						},
 					},
