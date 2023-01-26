@@ -67,8 +67,7 @@ $ mv /path/to/google-home-notifier.service /usr/lib/systemd/system/google-home-n
 $ systemctl start google-home-notifier.service
 
 # Check systemd status
-systemctl status google-home-notifier.service
-systemctl status google-home-notifier.service
+$ systemctl status google-home-notifier.service
 ● google-home-notifier.service - Send notifications to Google Home
    Loaded: loaded (/lib/systemd/system/google-home-notifier.service; disabled; vendor preset: enabled)
    Active: active (running) since Fri 2023-01-20 13:54:28 JST; 13s ago
@@ -80,4 +79,8 @@ systemctl status google-home-notifier.service
 Jan 20 13:54:28 tomoya-rasp systemd[1]: Started Send notifications to Google Home.
 Jan 20 13:54:28 tomoya-rasp google-home-notifier[9005]: 2023/01/20 13:54:28 commands.go:58: Start daemon.
 Jan 20 13:54:28 tomoya-rasp google-home-notifier[9005]: 2023/01/20 13:54:28 server.go:42: server start on port: 8000
+
+# Autostart
+$ systemctl enable  google-home-notifier.service
+Created symlink /etc/systemd/system/multi-user.target.wants/google-home-notifier.service → /lib/systemd/system/google-home-notifier.service.
 ```
